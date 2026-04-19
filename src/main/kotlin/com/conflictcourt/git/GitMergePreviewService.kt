@@ -13,57 +13,102 @@ class GitMergePreviewService(private val project: Project) {
     private val scanner = ConflictScanner()
 
     fun previewAgainst(targetBranch: String): MergePreviewOutcome {
+        val currentHead = currentBranchName()
+        return if (currentHead.isNullOrBlank()) {
+            previewBetween("HEAD", targetBranch)
+        } else {
+            previewBetween(currentHead, targetBranch, includeWorkingTree = true)
+        }
+    }
+
+    fun previewBetween(oursRef: String, incomingRef: String, includeWorkingTree: Boolean = false): MergePreviewOutcome {
         val projectRoot = project.basePath?.let(::File) ?: return MergePreviewOutcome.Failure("Project base path not found")
         val repoRoot = findRepoRoot(projectRoot)
             ?: return MergePreviewOutcome.Failure("Git repository not found for project path: ${projectRoot.absolutePath}")
-        val targetCommit = verifyRef(repoRoot, targetBranch)
+        val oursCommit = verifyRef(repoRoot, oursRef)
             ?: return MergePreviewOutcome.Failure(
-                "Git ref not found: $targetBranch. Try a local branch name or remote ref like origin/main."
+                "Git ref not found: $oursRef. Try a local branch name or remote ref like origin/main."
+            )
+        val targetCommit = verifyRef(repoRoot, incomingRef)
+            ?: return MergePreviewOutcome.Failure(
+                "Git ref not found: $incomingRef. Try a local branch name or remote ref like origin/main."
             )
 
-        val headCommit = git(repoRoot, "rev-parse", "--verify", "HEAD^{commit}").trim()
-        val base = git(repoRoot, "merge-base", headCommit, targetCommit).trim()
+        val base = git(repoRoot, "merge-base", oursCommit, targetCommit).trim()
         if (base.isBlank()) {
-            return MergePreviewOutcome.Failure("Could not determine merge base for $targetBranch")
+            return MergePreviewOutcome.Failure("Could not determine merge base for $oursRef and $incomingRef")
         }
 
-        val oursFiles = changedFiles(repoRoot, base, headCommit) + workingTreeChangedFiles(repoRoot)
+        val oursFiles = changedFiles(repoRoot, base, oursCommit) + if (includeWorkingTree) workingTreeChangedFiles(repoRoot) else emptySet()
         val theirsFiles = changedFiles(repoRoot, base, targetCommit)
         val candidateFiles = oursFiles.intersect(theirsFiles).sorted()
         if (candidateFiles.isEmpty()) {
             return MergePreviewOutcome.Skipped(
                 buildString {
-                    append("No overlapping file changes between HEAD and $targetBranch.")
+                    append("No overlapping file changes between $oursRef and $incomingRef.")
                     append("\n")
-                    append("Changed in current branch/working tree: ${oursFiles.size}")
+                    append("Changed in source branch")
+                    if (includeWorkingTree) append("/working tree")
+                    append(": ${oursFiles.size}")
                     append("\n")
-                    append("Changed in target branch: ${theirsFiles.size}")
+                    append("Changed in incoming branch: ${theirsFiles.size}")
                     if (oursFiles.isNotEmpty()) {
                         append("\n")
-                        append("Current examples: ${oursFiles.take(5).joinToString(", ")}")
+                        append("Source examples: ${oursFiles.take(5).joinToString(", ")}")
                     }
                     if (theirsFiles.isNotEmpty()) {
                         append("\n")
-                        append("Target examples: ${theirsFiles.take(5).joinToString(", ")}")
+                        append("Incoming examples: ${theirsFiles.take(5).joinToString(", ")}")
                     }
                 }
             )
         }
 
-        val commitHead = latestCommitMessage(repoRoot, headCommit)
+        val commitHead = latestCommitMessage(repoRoot, oursCommit)
         val commitIncoming = latestCommitMessage(repoRoot, targetCommit)
         val conflicts = candidateFiles.mapNotNull { path ->
-            previewFileConflict(repoRoot, base, headCommit, targetCommit, path, commitHead, commitIncoming)
+            previewFileConflict(repoRoot, base, oursCommit, targetCommit, path, commitHead, commitIncoming)
         }
 
         return if (conflicts.isEmpty()) {
-            MergePreviewOutcome.Skipped("No merge conflicts detected against $targetBranch")
+            MergePreviewOutcome.Skipped("No merge conflicts detected between $oursRef and $incomingRef")
         } else {
             MergePreviewOutcome.Success(
-                message = "Detected ${conflicts.size} merge-preview conflict(s) against $targetBranch",
+                message = "Detected ${conflicts.size} merge-preview conflict(s) between $oursRef and $incomingRef",
                 conflicts = conflicts
             )
         }
+    }
+
+    fun currentBranchName(): String? {
+        val projectRoot = project.basePath?.let(::File) ?: return null
+        val repoRoot = findRepoRoot(projectRoot) ?: return null
+        return runCatching { git(repoRoot, "symbolic-ref", "--short", "HEAD").trim() }
+            .getOrNull()
+            ?.ifBlank { null }
+    }
+
+    fun listBranchRefs(): List<String> {
+        val projectRoot = project.basePath?.let(::File) ?: return emptyList()
+        val repoRoot = findRepoRoot(projectRoot) ?: return emptyList()
+
+        val local = runCatching {
+            git(repoRoot, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .toList()
+        }.getOrDefault(emptyList())
+
+        val remote = runCatching {
+            git(repoRoot, "for-each-ref", "--format=%(refname:short)", "refs/remotes")
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotBlank() && !it.endsWith("/HEAD") }
+                .toList()
+        }.getOrDefault(emptyList())
+
+        return (local + remote).distinct().sorted()
     }
 
     fun diffAgainst(targetBranch: String): MergePreviewOutcome {
