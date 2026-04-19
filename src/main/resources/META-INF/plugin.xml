@@ -41,5 +41,12 @@
                 description="Exports branch differences as JSON even when merge conflicts do not exist">
             <add-to-group group-id="ToolsMenu" anchor="last" />
         </action>
+        <action
+                id="ConflictCourt.ResolveConflictWithAiAction"
+                class="com.conflictcourt.actions.ResolveConflictWithAiAction"
+                text="ConflictCourt: Resolve Conflict with AI"
+                description="Resolves the selected merge conflict block in the active editor using AI">
+            <add-to-group group-id="ToolsMenu" anchor="last" />
+        </action>
     </actions>
 </idea-plugin>

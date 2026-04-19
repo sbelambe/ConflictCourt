@@ -46,6 +46,11 @@ class ConflictMonitorService(private val project: Project) {
         listeners -= listener
     }
 
+    fun overrideUploadStatus(message: String) {
+        latestResult = latestResult.copy(uploadStatus = message)
+        notifyListeners()
+    }
+
     private fun notifyListeners() {
         listeners.forEach { it(latestResult) }
     }
