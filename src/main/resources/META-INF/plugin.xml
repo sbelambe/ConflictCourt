@@ -27,5 +27,12 @@
                 description="Triggers the ConflictCourt starter action">
             <add-to-group group-id="ToolsMenu" anchor="last" />
         </action>
+        <action
+                id="ConflictCourt.ExportMergePreviewAction"
+                class="com.conflictcourt.actions.ExportMergePreviewAction"
+                text="ConflictCourt: Export Merge Preview"
+                description="Simulates a merge against a target branch and exports real conflicts to JSON">
+            <add-to-group group-id="ToolsMenu" anchor="last" />
+        </action>
     </actions>
 </idea-plugin>
