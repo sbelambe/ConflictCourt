@@ -1,0 +1,31 @@
+<idea-plugin>
+    <id>com.conflictcourt.plugin</id>
+    <name>ConflictCourt</name>
+    <vendor email="maintainers@conflictcourt.dev" url="https://github.com/">ConflictCourt</vendor>
+
+    <description><![CDATA[
+        ConflictCourt detects merge conflicts, prepares collaboration context, and helps resolve them faster.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity implementation="com.conflictcourt.startup.ConflictListenerStartupActivity" />
+        <notificationGroup id="ConflictCourt" displayType="BALLOON" />
+        <toolWindow
+                id="ConflictCourt"
+                anchor="right"
+                factoryClass="com.conflictcourt.toolwindow.ConflictCourtToolWindowFactory"
+                canCloseContents="false" />
+    </extensions>
+
+    <actions>
+        <action
+                id="ConflictCourt.OpenWarRoomAction"
+                class="com.conflictcourt.actions.OpenWarRoomAction"
+                text="ConflictCourt: Open War Room"
+                description="Triggers the ConflictCourt starter action">
+            <add-to-group group-id="ToolsMenu" anchor="last" />
+        </action>
+    </actions>
+</idea-plugin>
