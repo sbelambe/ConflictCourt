@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-04-19T01:35:34.069152Z",
+  "mode": "merge_preview",
+  "target_branch": "1",
+  "conflicts": [
+    {
+      "file_name": "test.txt",
+      "file_path": "test.txt",
+      "language": "Unknown",
+      "indentation": "Unknown",
+      "code_head": "x = 4q43as03oi3",
+      "code_incoming": "x = 1",
+      "buffer_above": "",
+      "buffer_below": "",
+      "imports_list": [],
+      "parent_signature": "<<<<<<< /tmp/conflictcourt-ours-invalid.tmp",
+      "commit_msg_head": "initial setup of gradle, added conflict detection, JSON export, and JCEF sidebar",
+      "commit_msg_incoming": "test"
+    }
+  ]
+}

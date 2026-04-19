@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-04-19T01:57:53.255560Z",
+  "mode": "merge_preview",
+  "target_branch": "test1",
+  "conflicts": [
+    {
+      "file_name": "test.txt",
+      "file_path": "test.txt",
+      "language": "Unknown",
+      "indentation": "Unknown",
+      "code_head": "x = 12",
+      "code_incoming": "x = 10",
+      "buffer_above": "",
+      "buffer_below": "",
+      "imports_list": [],
+      "parent_signature": "<<<<<<< /var/folders/gh/q87xz5kn6tn4w9zcnvxk2jb00000gn/T/conflictcourt-ours16669843336074920086.tmp",
+      "commit_msg_head": "changed json timestamp method to add all conflicts to one json called conflictcourt_merge_preview.json",
+      "commit_msg_incoming": "test"
+    },
+    {
+      "file_name": "test.txt",
+      "file_path": "test.txt",
+      "language": "Unknown",
+      "indentation": "Unknown",
+      "code_head": "x = 123",
+      "code_incoming": "x = 10",
+      "buffer_above": "",
+      "buffer_below": "",
+      "imports_list": [],
+      "parent_signature": "<<<<<<< /var/folders/gh/q87xz5kn6tn4w9zcnvxk2jb00000gn/T/conflictcourt-ours14715570435405684210.tmp",
+      "commit_msg_head": "changed json timestamp method to add all conflicts to one json called conflictcourt_merge_preview.json",
+      "commit_msg_incoming": "test"
+    }
+  ]
+}

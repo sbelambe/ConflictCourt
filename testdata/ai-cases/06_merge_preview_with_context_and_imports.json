@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-04-19T02:05:00.000000Z",
+  "mode": "merge_preview",
+  "target_branch": "origin/main",
+  "conflicts": [
+    {
+      "file_name": "formatter.js",
+      "file_path": "src/utils/formatter.js",
+      "language": "JavaScript",
+      "indentation": "Spaces (2)",
+      "code_head": "return amount.toFixed(2);",
+      "code_incoming": "return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);",
+      "buffer_above": "export function formatAmount(amount) {",
+      "buffer_below": "}",
+      "imports_list": [
+        "import { Intl } from 'intl';"
+      ],
+      "parent_signature": "export function formatAmount(amount) {",
+      "commit_msg_head": "keep simple decimal formatter for speed",
+      "commit_msg_incoming": "use currency formatter for locale correctness"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "cases": [
+    {
+      "fileName": "07_invalid_payload.json",
+      "expectParseSuccess": false,
+      "expectAiSuccess": false
+    }
+  ]
+}

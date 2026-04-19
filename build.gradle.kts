@@ -39,6 +39,20 @@ tasks {
     runIde {
         jvmArgs("-Xmx2g")
     }
+
+    register<JavaExec>("runMainTestRunner") {
+        group = "application"
+        description = "Runs the ConflictCourt AI MainTestRunner from the terminal."
+        classpath = sourceSets["main"].runtimeClasspath
+        mainClass.set("com.conflictcourt.ai.MainTestRunnerKt")
+    }
+
+    register<JavaExec>("runBatchAiTestRunner") {
+        group = "application"
+        description = "Runs batch AI integration tests across JSON fixtures."
+        classpath = sourceSets["main"].runtimeClasspath
+        mainClass.set("com.conflictcourt.ai.BatchAiTestRunnerKt")
+    }
 }
 
 kotlin {

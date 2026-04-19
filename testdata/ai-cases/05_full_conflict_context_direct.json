@@ -1,0 +1,37 @@
+{
+  "filePath": "src/main/kotlin/App.kt",
+  "language": "Kotlin",
+  "indentationStyle": "Spaces (4)",
+  "conflictBlocks": [
+    {
+      "startLine": 41,
+      "separatorLine": 44,
+      "endLine": 47,
+      "currentLabel": "HEAD",
+      "incomingLabel": "origin/main",
+      "currentText": "logger.info(\"Connected\")",
+      "incomingText": "logger.info(\"Connected to ${host}:${port}\")",
+      "contextAbove": [
+        "fun onConnected(host: String, port: Int) {"
+      ],
+      "contextBelow": [
+        "}"
+      ]
+    }
+  ],
+  "gitHistory": {
+    "currentBranch": "feature-logging",
+    "incomingBranch": "main",
+    "currentBranchLastCommitMessage": "keep connection logs concise",
+    "incomingBranchLastCommitMessage": "add host and port to connection logs"
+  },
+  "externalLogic": {
+    "functionAndClassSignatures": [
+      "fun onConnected(host: String, port: Int)"
+    ],
+    "imports": [
+      "import org.slf4j.LoggerFactory"
+    ]
+  },
+  "capturedAtIsoUtc": "2026-04-19T02:00:00Z"
+}

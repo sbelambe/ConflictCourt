@@ -1,0 +1,5 @@
+{
+  "mode": "merge_preview",
+  "target_branch": "main",
+  "note": "Intentionally invalid: no conflicts array, no ConflictContext shape, and no flat conflict fields."
+}

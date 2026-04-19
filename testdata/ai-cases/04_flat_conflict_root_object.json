@@ -1,0 +1,13 @@
+{
+  "file_path": "service.py",
+  "language": "Python",
+  "indentation": "Spaces (4)",
+  "code_head": "return user.is_admin",
+  "code_incoming": "return user.is_admin and user.is_active",
+  "buffer_above": "def can_access(user):",
+  "buffer_below": "",
+  "imports_list": [],
+  "parent_signature": "def can_access(user):",
+  "commit_msg_head": "allow admins immediately",
+  "commit_msg_incoming": "gate access on active accounts too"
+}

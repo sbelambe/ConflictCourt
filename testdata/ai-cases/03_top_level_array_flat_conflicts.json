@@ -1,0 +1,28 @@
+[
+  {
+    "file_path": "src/main/kotlin/Demo.kt",
+    "language": "Kotlin",
+    "indentation": "Spaces (4)",
+    "code_head": "val retries = -1",
+    "code_incoming": "val retries = 3",
+    "buffer_above": "fun connect() {",
+    "buffer_below": "}",
+    "imports_list": [],
+    "parent_signature": "fun connect() {",
+    "commit_msg_head": "temporary disable retries while debugging",
+    "commit_msg_incoming": "set production-safe retry count"
+  },
+  {
+    "file_path": "src/main/kotlin/Demo.kt",
+    "language": "Kotlin",
+    "indentation": "Spaces (4)",
+    "code_head": "val timeoutMs = 50",
+    "code_incoming": "val timeoutMs = 5000",
+    "buffer_above": "fun connect() {",
+    "buffer_below": "}",
+    "imports_list": [],
+    "parent_signature": "fun connect() {",
+    "commit_msg_head": "reduce timeout for local debug loops",
+    "commit_msg_incoming": "increase timeout to avoid flaky production timeouts"
+  }
+]

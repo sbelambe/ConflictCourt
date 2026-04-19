@@ -37,6 +37,7 @@ class CodexService(
     suspend fun resolveConflict(context: ConflictContext): CodexOutcome = withContext(Dispatchers.IO) {
         val endpoint = "${config.apiBaseUrl}/responses"
         val payload = buildRequestPayload(context)
+        var lastBody: String? = null
         val request = Request.Builder()
             .url(endpoint)
             .header("Authorization", "Bearer ${config.apiKey}")
@@ -47,6 +48,7 @@ class CodexService(
         try {
             client.await(request).use { response ->
                 val body = response.body?.string().orEmpty()
+                lastBody = body
                 if (!response.isSuccessful) {
                     return@withContext CodexOutcome.Failure(
                         statusCode = response.code,
@@ -69,7 +71,7 @@ class CodexService(
             CodexOutcome.Failure(
                 statusCode = null,
                 message = e.message ?: "Unexpected Codex error",
-                rawResponse = null
+                rawResponse = lastBody
             )
         }
     }
@@ -125,7 +127,6 @@ class CodexService(
                     )
                 }
             )
-            put("temperature", config.temperature)
             put("max_output_tokens", config.maxOutputTokens)
         }
 
