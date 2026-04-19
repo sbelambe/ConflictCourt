@@ -2,6 +2,7 @@ package com.conflictcourt.export
 
 import com.conflictcourt.conflicts.ConflictBlock
 import com.conflictcourt.conflicts.ConflictScanResult
+import com.conflictcourt.git.MergePreviewConflict
 import com.intellij.openapi.project.Project
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -20,6 +21,32 @@ class ConflictJsonExporter(private val project: Project) {
         val exportPath = buildExportPath(Path.of(projectBasePath), Path.of(filePath))
         Files.writeString(exportPath, buildJson(result), StandardCharsets.UTF_8)
         return ExportOutcome.Success("Exported conflict JSON to ${exportPath.toAbsolutePath()}")
+    }
+
+    fun exportMergePreview(targetBranch: String, conflicts: List<MergePreviewConflict>): ExportOutcome {
+        val projectBasePath = project.basePath ?: return ExportOutcome.Failure("Project base path not found")
+        if (conflicts.isEmpty()) {
+            return ExportOutcome.Skipped("No merge-preview conflicts to export")
+        }
+
+        val timestamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS").format(java.time.LocalDateTime.now())
+        val sanitizedTarget = targetBranch.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val exportPath = Path.of(projectBasePath).resolve("conflictcourt_merge_preview_${sanitizedTarget}_$timestamp.json")
+        Files.writeString(exportPath, buildMergePreviewJson(targetBranch, conflicts), StandardCharsets.UTF_8)
+        return ExportOutcome.Success("Exported merge-preview JSON to ${exportPath.toAbsolutePath()}")
+    }
+
+    fun exportDiffPreview(targetBranch: String, diffs: List<MergePreviewConflict>): ExportOutcome {
+        val projectBasePath = project.basePath ?: return ExportOutcome.Failure("Project base path not found")
+        if (diffs.isEmpty()) {
+            return ExportOutcome.Skipped("No diff-preview entries to export")
+        }
+
+        val timestamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS").format(java.time.LocalDateTime.now())
+        val sanitizedTarget = targetBranch.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val exportPath = Path.of(projectBasePath).resolve("conflictcourt_diff_preview_${sanitizedTarget}_$timestamp.json")
+        Files.writeString(exportPath, buildDiffPreviewJson(targetBranch, diffs), StandardCharsets.UTF_8)
+        return ExportOutcome.Success("Exported diff-preview JSON to ${exportPath.toAbsolutePath()}")
     }
 
     private fun buildExportPath(projectRoot: Path, conflictFile: Path): Path {
@@ -50,6 +77,70 @@ class ConflictJsonExporter(private val project: Project) {
           "commit_msg_head": ${jsonString(readGitMessage("HEAD"))},
           "commit_msg_incoming": ${jsonString(readGitMessage(result.blocks.firstOrNull()?.incomingLabel))},
           "conflicts": [
+        $entries
+          ]
+        }
+        """.trimIndent()
+    }
+
+    private fun buildMergePreviewJson(targetBranch: String, conflicts: List<MergePreviewConflict>): String {
+        val entries = conflicts.joinToString(",\n") { conflict ->
+            """
+            {
+              "file_name": ${jsonString(conflict.fileName)},
+              "file_path": ${jsonString(conflict.filePath)},
+              "language": ${jsonString(conflict.language)},
+              "indentation": ${jsonString(conflict.indentation)},
+              "code_head": ${jsonString(conflict.codeHead)},
+              "code_incoming": ${jsonString(conflict.codeIncoming)},
+              "buffer_above": ${jsonString(conflict.bufferAbove)},
+              "buffer_below": ${jsonString(conflict.bufferBelow)},
+              "imports_list": ${jsonArray(conflict.importsList)},
+              "parent_signature": ${jsonString(conflict.parentSignature)},
+              "commit_msg_head": ${jsonString(conflict.commitMsgHead)},
+              "commit_msg_incoming": ${jsonString(conflict.commitMsgIncoming)}
+            }
+            """.trimIndent()
+        }
+
+        return """
+        {
+          "generated_at": ${jsonString(Instant.now().toString())},
+          "mode": "merge_preview",
+          "target_branch": ${jsonString(targetBranch)},
+          "conflicts": [
+        $entries
+          ]
+        }
+        """.trimIndent()
+    }
+
+    private fun buildDiffPreviewJson(targetBranch: String, diffs: List<MergePreviewConflict>): String {
+        val entries = diffs.joinToString(",\n") { conflict ->
+            """
+            {
+              "file_name": ${jsonString(conflict.fileName)},
+              "file_path": ${jsonString(conflict.filePath)},
+              "language": ${jsonString(conflict.language)},
+              "indentation": ${jsonString(conflict.indentation)},
+              "code_head": ${jsonString(conflict.codeHead)},
+              "code_incoming": ${jsonString(conflict.codeIncoming)},
+              "buffer_above": ${jsonString(conflict.bufferAbove)},
+              "buffer_below": ${jsonString(conflict.bufferBelow)},
+              "imports_list": ${jsonArray(conflict.importsList)},
+              "parent_signature": ${jsonString(conflict.parentSignature)},
+              "commit_msg_head": ${jsonString(conflict.commitMsgHead)},
+              "commit_msg_incoming": ${jsonString(conflict.commitMsgIncoming)}
+            }
+            """.trimIndent()
+        }
+
+        return """
+        {
+          "generated_at": ${jsonString(Instant.now().toString())},
+          "mode": "diff_preview",
+          "target_branch": ${jsonString(targetBranch)},
+          "differences": [
         $entries
           ]
         }
