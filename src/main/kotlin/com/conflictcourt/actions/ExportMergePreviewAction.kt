@@ -4,6 +4,8 @@ import com.conflictcourt.export.ConflictJsonExporter
 import com.conflictcourt.export.ExportOutcome
 import com.conflictcourt.git.GitMergePreviewService
 import com.conflictcourt.git.MergePreviewOutcome
+import com.conflictcourt.supabase.MergeLogsUploader
+import com.conflictcourt.supabase.UploadOutcome
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -14,6 +16,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.wm.ToolWindowManager
+import java.util.UUID
 
 class ExportMergePreviewAction : AnAction() {
     override fun actionPerformed(event: AnActionEvent) {
@@ -43,17 +46,32 @@ class ExportMergePreviewAction : AnAction() {
                     when (val outcome = previewService.previewAgainst(targetBranch)) {
                         is MergePreviewOutcome.Success -> {
                             val exportOutcome = exporter.exportMergePreview(targetBranch, outcome.conflicts)
+                            val mergeLogsUploader = MergeLogsUploader.fromProject(project)
+                            val uploadOutcome = when {
+                                mergeLogsUploader == null -> UploadOutcome.Skipped("Supabase merge_logs disabled")
+                                else -> runCatching {
+                                    mergeLogsUploader.uploadMergePreview(outcome.conflicts, UUID.randomUUID().toString())
+                                }.getOrElse { exception ->
+                                    UploadOutcome.Failure("Supabase merge_logs upload error: ${exception.message ?: "unknown error"}")
+                                }
+                            }
                             PreviewUiResult(
                                 title = "Merge preview exported",
                                 message = buildString {
                                     append(outcome.message)
                                     append("\n")
                                     append(exportOutcome.message)
+                                    append("\n")
+                                    append(uploadOutcome.message)
                                 },
                                 type = when (exportOutcome) {
                                     is ExportOutcome.Failure -> NotificationType.ERROR
                                     is ExportOutcome.Skipped -> NotificationType.WARNING
-                                    is ExportOutcome.Success -> NotificationType.INFORMATION
+                                    is ExportOutcome.Success -> when (uploadOutcome) {
+                                        is UploadOutcome.Failure -> NotificationType.ERROR
+                                        is UploadOutcome.Skipped -> NotificationType.WARNING
+                                        is UploadOutcome.Success -> NotificationType.INFORMATION
+                                    }
                                 }
                             )
                         }
