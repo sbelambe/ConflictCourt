@@ -56,7 +56,7 @@ class ConflictCourtToolWindowPanel(private val project: Project) : JBPanel<Confl
 
     private fun buildContent(): JComponent {
         val browserInstance = browser ?: return fallbackBrowserPanel()
-        val url = WarRoomUrlProvider.currentUrl()
+        val url = WarRoomUrlProvider.currentUrl(project)
 
         getStateQuery = JBCefJSQuery.create(browserInstance).also { query ->
             query.addHandler {
@@ -242,7 +242,7 @@ class ConflictCourtToolWindowPanel(private val project: Project) : JBPanel<Confl
             put("selectedHead", JsonPrimitive(selectedHead))
             put("selectedIncoming", JsonPrimitive(selectedIncoming))
             put("workingTreeOptionValue", JsonPrimitive(workingTreeOptionValue))
-            put("webUrl", JsonPrimitive(WarRoomUrlProvider.currentUrl()))
+            put("webUrl", JsonPrimitive(WarRoomUrlProvider.currentUrl(project)))
             put("branches", buildJsonArray { branches.forEach { add(JsonPrimitive(it)) } })
             put(
                 "conflicts",

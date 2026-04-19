@@ -16,6 +16,23 @@ npm run dev
 2. Deploy.
 3. Set plugin env var `CONFLICTCOURT_WEB_URL` to your Vercel URL.
 
+If the Vercel dashboard root-directory picker does not show `web/`:
+
+1. Ensure the `web/` folder is committed and pushed to the branch Vercel imports.
+2. Import the repo, then manually set **Root Directory** to `web`.
+3. If UI still fails, deploy from CLI instead:
+
+```bash
+cd web
+npx vercel
+```
+
+Then promote to production:
+
+```bash
+npx vercel --prod
+```
+
 ## Bridge Contract
 
 The plugin injects `window.conflictCourtBridge` with:
