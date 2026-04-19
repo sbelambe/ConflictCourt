@@ -1,7 +1,9 @@
 package com.conflictcourt.actions
 
-import com.conflictcourt.ai.ConflictCourtAiFactory
+import com.conflictcourt.ai.ConflictContext
 import com.conflictcourt.ai.ConflictContextBuilder
+import com.conflictcourt.ai.ConflictContextInputParser
+import com.conflictcourt.ai.ConflictCourtAiFactory
 import com.conflictcourt.ai.PipelineOutcome
 import com.conflictcourt.conflicts.ConflictBlock
 import com.conflictcourt.conflicts.ConflictMonitorService
@@ -24,6 +26,7 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.psi.PsiDocumentManager
 import kotlinx.coroutines.runBlocking
+import java.io.File
 
 class ResolveConflictWithAiAction : AnAction() {
     private val scanner = ConflictScanner()
@@ -38,13 +41,12 @@ class ResolveConflictWithAiAction : AnAction() {
 
         val document = editor.document
         val filePath = FileDocumentManager.getInstance().getFile(document)?.path
-        val scanResult = scanner.scan(document.text, filePath)
-        if (!scanResult.hasConflicts) {
-            notify(project, "ConflictCourt AI Resolve", "No conflict markers found in the active file.", NotificationType.INFORMATION)
+        if (filePath == null) {
+            notify(project, "ConflictCourt AI Resolve", "Active file path not found.", NotificationType.WARNING)
             return
         }
 
-        val targetBlock = selectTargetBlock(project, editor, scanResult.blocks) ?: return
+        val target = resolveTarget(project, editor, document, filePath) ?: return
         val pipeline = ConflictCourtAiFactory.createPipelineFromEnvironment()
         if (pipeline == null) {
             notify(project, "ConflictCourt AI Resolve", "AI pipeline could not be initialized. Check OPENAI_API_KEY.", NotificationType.ERROR)
@@ -52,25 +54,180 @@ class ResolveConflictWithAiAction : AnAction() {
         }
 
         val snapshotStamp = document.modificationStamp
-        val context = ConflictContextBuilder.fromConflictBlock(project, filePath, document.text, targetBlock)
+        val snapshotHash = document.text.hashCode()
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "ConflictCourt: Resolve Conflict with AI", false) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.text = "Sending conflict to AI"
-                val outcome = runBlocking { pipeline.resolve(context) }
+                val outcome = runBlocking { pipeline.resolve(target.context) }
                 ApplicationManager.getApplication().invokeLater {
-                    applyOutcome(project, editor, document, targetBlock, snapshotStamp, outcome)
+                    applyOutcome(project, document, target, snapshotStamp, snapshotHash, outcome)
                 }
             }
         })
     }
 
-    private fun applyOutcome(
+    private fun resolveTarget(
         project: Project,
         editor: Editor,
         document: Document,
-        block: ConflictBlock,
+        filePath: String
+    ): ApplyTarget? {
+        val markerTarget = resolveMarkerTarget(project, editor, document, filePath)
+        if (markerTarget != null) return markerTarget
+        return resolvePreviewJsonTarget(project, editor, document, filePath)
+    }
+
+    private fun resolveMarkerTarget(
+        project: Project,
+        editor: Editor,
+        document: Document,
+        filePath: String
+    ): ApplyTarget? {
+        val scanResult = scanner.scan(document.text, filePath)
+        if (!scanResult.hasConflicts) return null
+
+        val targetBlock = selectTargetBlock(project, editor, scanResult.blocks) ?: return null
+        val context = ConflictContextBuilder.fromConflictBlock(project, filePath, document.text, targetBlock)
+        val startOffset = document.getLineStartOffset(targetBlock.startLine - 1)
+        val endOffset = document.getLineEndOffset(targetBlock.endLine - 1)
+
+        return ApplyTarget(
+            startOffset = startOffset,
+            endOffset = endOffset,
+            context = context,
+            source = "in-file conflict markers",
+            lineStart = targetBlock.startLine,
+            lineEnd = targetBlock.endLine
+        )
+    }
+
+    private fun resolvePreviewJsonTarget(
+        project: Project,
+        editor: Editor,
+        document: Document,
+        activeFilePath: String
+    ): ApplyTarget? {
+        val projectBase = project.basePath ?: run {
+            notify(project, "ConflictCourt AI Resolve", "Project base path not found.", NotificationType.WARNING)
+            return null
+        }
+        val previewFile = File(projectBase, "conflictcourt_merge_preview.json")
+        if (!previewFile.exists() || !previewFile.isFile) {
+            notify(
+                project,
+                "ConflictCourt AI Resolve",
+                "No conflict markers found and no conflictcourt_merge_preview.json found in project root.",
+                NotificationType.INFORMATION
+            )
+            return null
+        }
+
+        val raw = runCatching { previewFile.readText() }.getOrElse {
+            notify(project, "ConflictCourt AI Resolve", "Failed to read ${previewFile.name}: ${it.message}", NotificationType.ERROR)
+            return null
+        }
+
+        val contexts = ConflictContextInputParser.parseAll(raw)
+        if (contexts.isEmpty()) {
+            notify(project, "ConflictCourt AI Resolve", "No parseable conflicts found in ${previewFile.name}.", NotificationType.WARNING)
+            return null
+        }
+
+        val matchingByPath = contexts.filter { contextPathMatchesActive(it.filePath, activeFilePath, projectBase) }
+        if (matchingByPath.isEmpty()) {
+            notify(project, "ConflictCourt AI Resolve", "No preview conflicts match the active file path.", NotificationType.WARNING)
+            return null
+        }
+
+        val located = matchingByPath.mapNotNull { context ->
+            locateRangeInDocument(document.text, context, editor.caretModel.offset)?.let { range ->
+                ApplyTarget(
+                    startOffset = range.first,
+                    endOffset = range.second,
+                    context = context,
+                    source = "merge preview JSON",
+                    lineStart = document.getLineNumber(range.first) + 1,
+                    lineEnd = document.getLineNumber(maxOf(range.first, range.second - 1)) + 1
+                )
+            }
+        }
+
+        if (located.isEmpty()) {
+            notify(
+                project,
+                "ConflictCourt AI Resolve",
+                "Matched preview conflict(s), but could not uniquely locate code_head/code_incoming in active file.",
+                NotificationType.WARNING
+            )
+            return null
+        }
+
+        val caretOffset = editor.caretModel.offset
+        val caretMatches = located.filter { caretOffset in it.startOffset until it.endOffset.coerceAtLeast(it.startOffset + 1) }
+        return when {
+            caretMatches.size == 1 -> caretMatches.first()
+            located.size == 1 -> located.first()
+            else -> {
+                notify(
+                    project,
+                    "ConflictCourt AI Resolve",
+                    "Multiple preview conflicts match this file. Move caret inside the target region or reduce preview to one conflict.",
+                    NotificationType.WARNING
+                )
+                null
+            }
+        }
+    }
+
+    private fun contextPathMatchesActive(contextPath: String, activeFilePath: String, projectBase: String): Boolean {
+        val normalizedContext = contextPath.replace('\\', '/')
+        val normalizedActive = activeFilePath.replace('\\', '/')
+        if (normalizedContext == normalizedActive) return true
+        if (normalizedActive.endsWith("/$normalizedContext")) return true
+
+        val relativeActive = runCatching {
+            val base = File(projectBase).canonicalFile.toPath()
+            val active = File(activeFilePath).canonicalFile.toPath()
+            base.relativize(active).toString().replace('\\', '/')
+        }.getOrNull()
+        return relativeActive == normalizedContext
+    }
+
+    private fun locateRangeInDocument(documentText: String, context: ConflictContext, caretOffset: Int): Pair<Int, Int>? {
+        val block = context.conflictBlocks.firstOrNull() ?: return null
+        val currentRanges = findAllRanges(documentText, block.currentText)
+        val incomingRanges = findAllRanges(documentText, block.incomingText)
+
+        if (currentRanges.size == 1) return currentRanges.first()
+        if (incomingRanges.size == 1) return incomingRanges.first()
+
+        val allRanges = (currentRanges + incomingRanges).distinct()
+        if (allRanges.size == 1) return allRanges.first()
+
+        val containingCaret = allRanges.filter { caretOffset in it.first until it.second.coerceAtLeast(it.first + 1) }
+        return if (containingCaret.size == 1) containingCaret.first() else null
+    }
+
+    private fun findAllRanges(haystack: String, needle: String): List<Pair<Int, Int>> {
+        if (needle.isBlank()) return emptyList()
+        val ranges = mutableListOf<Pair<Int, Int>>()
+        var index = 0
+        while (true) {
+            val found = haystack.indexOf(needle, startIndex = index)
+            if (found < 0) break
+            ranges += found to (found + needle.length)
+            index = found + 1
+        }
+        return ranges
+    }
+
+    private fun applyOutcome(
+        project: Project,
+        document: Document,
+        target: ApplyTarget,
         snapshotStamp: Long,
+        snapshotHash: Int,
         outcome: PipelineOutcome
     ) {
         when (outcome) {
@@ -91,13 +248,13 @@ class ResolveConflictWithAiAction : AnAction() {
                     return
                 }
 
-                if (document.modificationStamp != snapshotStamp) {
+                if (document.modificationStamp != snapshotStamp || document.text.hashCode() != snapshotHash) {
                     notify(project, "ConflictCourt AI Resolve Aborted", "Document changed while AI was running. Re-run on latest content.", NotificationType.WARNING)
                     return
                 }
 
                 val preview = buildString {
-                    appendLine("Apply AI resolution to lines ${block.startLine}-${block.endLine}?")
+                    appendLine("Apply AI resolution from ${target.source} to lines ${target.lineStart}-${target.lineEnd}?")
                     appendLine()
                     appendLine("Preview:")
                     appendLine(mergedCode.take(1200))
@@ -108,18 +265,16 @@ class ResolveConflictWithAiAction : AnAction() {
                     return
                 }
 
-                val startOffset = document.getLineStartOffset(block.startLine - 1)
-                val endOffset = document.getLineEndOffset(block.endLine - 1)
                 val textToInsert = mergedCode.trimEnd('\n')
-
                 WriteCommandAction.runWriteCommandAction(project, "ConflictCourt: Apply AI Resolution", null, Runnable {
-                    document.replaceString(startOffset, endOffset, textToInsert)
+                    document.replaceString(target.startOffset, target.endOffset, textToInsert)
                     PsiDocumentManager.getInstance(project).commitDocument(document)
                     FileDocumentManager.getInstance().saveDocument(document)
                 })
 
-                project.getService(ConflictMonitorService::class.java).refreshForActiveEditor()
-                project.getService(ConflictMonitorService::class.java).overrideUploadStatus("Conflict resolved by AI.")
+                val monitor = project.getService(ConflictMonitorService::class.java)
+                monitor.refreshForActiveEditor()
+                monitor.overrideUploadStatus("Conflict resolved by AI.")
                 ToolWindowManager.getInstance(project).getToolWindow("ConflictCourt")?.show()
                 notify(project, "ConflictCourt AI Resolve", "Conflict resolved and applied to the document.", NotificationType.INFORMATION)
             }
@@ -179,4 +334,13 @@ class ResolveConflictWithAiAction : AnAction() {
             .createNotification(title, content, type)
             .notify(project)
     }
+
+    private data class ApplyTarget(
+        val startOffset: Int,
+        val endOffset: Int,
+        val context: ConflictContext,
+        val source: String,
+        val lineStart: Int,
+        val lineEnd: Int
+    )
 }
