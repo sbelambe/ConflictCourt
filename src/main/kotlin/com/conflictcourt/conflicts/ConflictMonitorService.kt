@@ -2,12 +2,15 @@ package com.conflictcourt.conflicts
 
 import com.conflictcourt.export.ConflictJsonExporter
 import com.conflictcourt.export.ExportOutcome
+import com.conflictcourt.supabase.MergeLogsUploader
+import com.conflictcourt.supabase.UploadOutcome
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.util.concurrency.AppExecutorUtil
+import java.util.UUID
 
 @Service(Service.Level.PROJECT)
 class ConflictMonitorService(private val project: Project) {
@@ -15,8 +18,10 @@ class ConflictMonitorService(private val project: Project) {
     private val listeners = linkedSetOf<(ConflictScanResult) -> Unit>()
     private val executor = AppExecutorUtil.getAppExecutorService()
     private val exporter = ConflictJsonExporter(project)
+    private val sessionId = UUID.randomUUID().toString()
     private var latestResult: ConflictScanResult = ConflictScanResult.empty()
     private var lastExportedSignature: String? = null
+    private var lastUploadedSignature: String? = null
 
     fun refreshForActiveEditor() {
         val editor = FileEditorManager.getInstance(project).selectedTextEditor
@@ -55,13 +60,18 @@ class ConflictMonitorService(private val project: Project) {
     }
 
     private fun applyLocalStatus(result: ConflictScanResult): ConflictScanResult {
+        val mergeLogsUploader = MergeLogsUploader.fromProject(project)
         return when {
             result.filePath == null -> result.copy(uploadStatus = "No active editor")
             !result.hasConflicts -> {
                 lastExportedSignature = null
+                lastUploadedSignature = null
                 result.copy(uploadStatus = "No conflicts to export")
             }
-            else -> result.copy(uploadStatus = "Conflict detected. JSON export pending.")
+            mergeLogsUploader == null -> result.copy(
+                uploadStatus = "Conflict detected. JSON export pending. Supabase disabled (set CONFLICTCOURT_SUPABASE_URL and CONFLICTCOURT_SUPABASE_KEY in .env)."
+            )
+            else -> result.copy(uploadStatus = "Conflict detected. JSON export + Supabase upload pending.")
         }
     }
 
@@ -70,9 +80,10 @@ class ConflictMonitorService(private val project: Project) {
             return
         }
 
+        val mergeLogsUploader = MergeLogsUploader.fromProject(project)
         val signature = buildSignature(result)
-        if (signature == lastExportedSignature) {
-            latestResult = latestResult.copy(uploadStatus = "Conflict already exported for current content")
+        if (signature == lastExportedSignature && (mergeLogsUploader == null || signature == lastUploadedSignature)) {
+            latestResult = latestResult.copy(uploadStatus = "Conflict already exported/uploaded for current content")
             notifyListeners()
             return
         }
@@ -80,13 +91,29 @@ class ConflictMonitorService(private val project: Project) {
         lastExportedSignature = signature
 
         executor.execute {
-            val outcome = try {
+            val exportOutcome = try {
                 exporter.export(result)
             } catch (exception: Exception) {
                 ExportOutcome.Failure("JSON export error: ${exception.message ?: "unknown error"}")
             }
 
-            latestResult = latestResult.copy(uploadStatus = outcome.message)
+            val uploadOutcome = try {
+                if (mergeLogsUploader == null) {
+                    UploadOutcome.Skipped("Supabase merge_logs disabled")
+                } else {
+                    val uploaded = mergeLogsUploader.upload(result, sessionId)
+                    if (uploaded is UploadOutcome.Success) {
+                        lastUploadedSignature = signature
+                    }
+                    uploaded
+                }
+            } catch (exception: Exception) {
+                UploadOutcome.Failure("Supabase merge_logs upload error: ${exception.message ?: "unknown error"}")
+            }
+
+            latestResult = latestResult.copy(
+                uploadStatus = "${exportOutcome.message} | ${uploadOutcome.message}"
+            )
             notifyListeners()
         }
     }

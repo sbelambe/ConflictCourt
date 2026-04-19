@@ -23,6 +23,7 @@ dependencies {
 intellij {
     version.set("2024.1")
     type.set("IC")
+    sandboxDir.set("${System.getProperty("java.io.tmpdir")}/conflictcourt-idea-sandbox")
 }
 
 tasks {
