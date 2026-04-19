@@ -2,6 +2,7 @@ package com.conflictcourt.ai
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -72,8 +73,14 @@ class SupabaseAuditLogger(
             put("incoming_branch", context.gitHistory.incomingBranch)
             put("current_branch_last_commit_message", context.gitHistory.currentBranchLastCommitMessage)
             put("incoming_branch_last_commit_message", context.gitHistory.incomingBranchLastCommitMessage)
-            put("function_and_class_signatures", buildJsonArray { context.externalLogic.functionAndClassSignatures.forEach { add(it) } })
-            put("imports", buildJsonArray { context.externalLogic.imports.forEach { add(it) } })
+            put(
+                "function_and_class_signatures",
+                buildJsonArray { context.externalLogic.functionAndClassSignatures.forEach { add(JsonPrimitive(it)) } }
+            )
+            put(
+                "imports",
+                buildJsonArray { context.externalLogic.imports.forEach { add(JsonPrimitive(it)) } }
+            )
             put("merged_code", resolution.mergedCode)
             put("inferred_intent", resolution.inferredIntent)
             put("confidence_score", resolution.confidenceScore)

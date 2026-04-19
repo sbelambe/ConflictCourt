@@ -7,6 +7,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -94,9 +95,9 @@ class CodexService(
             put(
                 "required",
                 buildJsonArray {
-                    add("merged_code")
-                    add("inferred_intent")
-                    add("confidence_score")
+                    add(JsonPrimitive("merged_code"))
+                    add(JsonPrimitive("inferred_intent"))
+                    add(JsonPrimitive("confidence_score"))
                 }
             )
             put("additionalProperties", false)
