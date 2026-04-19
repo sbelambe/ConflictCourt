@@ -29,11 +29,15 @@ class ConflictJsonExporter(private val project: Project) {
             return ExportOutcome.Skipped("No merge-preview conflicts to export")
         }
 
-        val timestamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS").format(java.time.LocalDateTime.now())
-        val sanitizedTarget = targetBranch.replace(Regex("[^A-Za-z0-9._-]"), "_")
-        val exportPath = Path.of(projectBasePath).resolve("conflictcourt_merge_preview_${sanitizedTarget}_$timestamp.json")
-        Files.writeString(exportPath, buildMergePreviewJson(targetBranch, conflicts), StandardCharsets.UTF_8)
-        return ExportOutcome.Success("Exported merge-preview JSON to ${exportPath.toAbsolutePath()}")
+        val exportPath = Path.of(projectBasePath).resolve("conflictcourt_merge_preview.json")
+        val newEntries = buildMergePreviewEntries(conflicts)
+        val mergedJson = if (Files.exists(exportPath)) {
+            mergeIntoExistingMergePreview(exportPath, targetBranch, newEntries)
+        } else {
+            buildMergePreviewJson(targetBranch, newEntries)
+        }
+        Files.writeString(exportPath, mergedJson, StandardCharsets.UTF_8)
+        return ExportOutcome.Success("Updated merge-preview JSON at ${exportPath.toAbsolutePath()}")
     }
 
     fun exportDiffPreview(targetBranch: String, diffs: List<MergePreviewConflict>): ExportOutcome {
@@ -83,8 +87,8 @@ class ConflictJsonExporter(private val project: Project) {
         """.trimIndent()
     }
 
-    private fun buildMergePreviewJson(targetBranch: String, conflicts: List<MergePreviewConflict>): String {
-        val entries = conflicts.joinToString(",\n") { conflict ->
+    private fun buildMergePreviewEntries(conflicts: List<MergePreviewConflict>): String {
+        return conflicts.joinToString(",\n") { conflict ->
             """
             {
               "file_name": ${jsonString(conflict.fileName)},
@@ -102,7 +106,9 @@ class ConflictJsonExporter(private val project: Project) {
             }
             """.trimIndent()
         }
+    }
 
+    private fun buildMergePreviewJson(targetBranch: String, entries: String): String {
         return """
         {
           "generated_at": ${jsonString(Instant.now().toString())},
@@ -113,6 +119,22 @@ class ConflictJsonExporter(private val project: Project) {
           ]
         }
         """.trimIndent()
+    }
+
+    private fun mergeIntoExistingMergePreview(exportPath: Path, targetBranch: String, newEntries: String): String {
+        val existingJson = Files.readString(exportPath, StandardCharsets.UTF_8)
+        val existingEntries = extractMergePreviewEntries(existingJson)
+        val combinedEntries = when {
+            existingEntries.isBlank() -> newEntries
+            newEntries.isBlank() -> existingEntries
+            else -> "$existingEntries,\n$newEntries"
+        }
+        return buildMergePreviewJson(targetBranch, combinedEntries)
+    }
+
+    private fun extractMergePreviewEntries(json: String): String {
+        val regex = Regex("(?s)\"conflicts\"\\s*:\\s*\\[(.*)]\\s*}\\s*$")
+        return regex.find(json)?.groupValues?.getOrNull(1)?.trim().orEmpty()
     }
 
     private fun buildDiffPreviewJson(targetBranch: String, diffs: List<MergePreviewConflict>): String {
