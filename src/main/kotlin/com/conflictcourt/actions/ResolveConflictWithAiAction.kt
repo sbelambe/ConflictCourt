@@ -47,7 +47,7 @@ class ResolveConflictWithAiAction : AnAction() {
         }
 
         val target = resolveTarget(project, editor, document, filePath) ?: return
-        val pipeline = ConflictCourtAiFactory.createPipelineFromEnvironment()
+        val pipeline = ConflictCourtAiFactory.createPipelineFromEnvironment(project.basePath)
         if (pipeline == null) {
             notify(project, "ConflictCourt AI Resolve", "AI pipeline could not be initialized. Check OPENAI_API_KEY.", NotificationType.ERROR)
             return

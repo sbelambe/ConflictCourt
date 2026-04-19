@@ -243,8 +243,8 @@ data class CodexConfig(
     companion object {
         private const val MODEL_ENV = "CONFLICTCOURT_CODEX_MODEL"
 
-        fun fromEnvironment(): CodexConfig? {
-            val apiKey = Config.openAiKey
+        fun fromEnvironment(projectBasePath: String? = null): CodexConfig? {
+            val apiKey = Config.openAiKeyFor(projectBasePath)
             if (apiKey.isBlank()) return null
 
             val model = System.getenv(MODEL_ENV)?.trim().orEmpty()
